@@ -111,6 +111,8 @@ app.get("/test", (req, res) => {
   res.send("OK");
 });
 
-server.listen(5000, () => {
-  console.log("Server Running on 5000");
+const PORT = process.env.PORT || 5000;
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
