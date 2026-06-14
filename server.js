@@ -4,192 +4,118 @@ const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
 
 dotenv.config();
 
-
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  },
-  transports: ["websocket", "polling"]
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  transports: ["websocket", "polling"],
 });
 
+// Pastikan folder uploads ada (untuk multer jika diperlukan nanti)
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
 }
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://smart-glasses.vercel.app"
-];
 
+// CORS — izinkan semua origin
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-
+  if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
-let latestFrame = null;
+// MongoDB
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.log("MongoDB error:", err));
 
-console.log(process.env.MONGO_URI)
-mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log("MongoDB Connected"))
-.catch(err => console.log(err));
-
+// Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.API_KEY,
-  api_secret: process.env.API_SECRET
+  api_key:    process.env.API_KEY,
+  api_secret: process.env.API_SECRET,
 });
 
-const PhotoSchema = new mongoose.Schema({
-  imageUrl: String,
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-});
+// Model
+const Photo = mongoose.model(
+  "Photo",
+  new mongoose.Schema({
+    imageUrl:  String,
+    createdAt: { type: Date, default: Date.now },
+  })
+);
 
-app.post("/frame", express.raw({ type: "image/jpeg", limit: "5mb" }), (req, res) => {
-  latestFrame = req.body;
-  res.sendStatus(200);
-});
+// ── Routes ──────────────────────────────────────────────
 
-app.get("/stream", (req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "multipart/x-mixed-replace; boundary=frame",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "Pragma": "no-cache"
-  });
-
-  res.flushHeaders?.();
-
-  const interval = setInterval(() => {
-    if (!latestFrame) return;
-
-    res.write(`--frame\r\n`);
-    res.write(`Content-Type: image/jpeg\r\n`);
-    res.write(`Content-Length: ${latestFrame.length}\r\n\r\n`);
-    res.write(latestFrame);
-    res.write("\r\n");
-  }, 100); // 10 FPS aman
-
-  req.on("close", () => {
-    clearInterval(interval);
-  });
-});
-
-const Photo = mongoose.model("Photo", PhotoSchema);
-const upload = multer({ dest: "uploads/" });
-
-app.post("/upload", express.raw({ type: "image/jpeg", limit: "10mb" }), async (req, res) => {
-  try {
-    console.log("UPLOAD HIT");
-
-    const buffer = req.body;
-
-    if (!buffer || buffer.length === 0) {
-      return res.status(400).json({ error: "empty buffer" });
-    }
-
-    cloudinary.uploader.upload_stream(
-      { resource_type: "image" },
-      async (err, result) => {
-        if (err) {
-          console.log("CLOUDINARY ERROR:", err);
-          return res.status(500).json(err);
-        }
-
-        console.log("UPLOAD SUCCESS:", result.secure_url);
-
-        const photo = await Photo.create({
-          imageUrl: result.secure_url
-        });
-
-        io.emit("new-photo", photo);
-
-        res.json(photo);
-      }
-    ).end(buffer);
-
-  } catch (err) {
-    console.log("UPLOAD ERROR:", err);
-    res.status(500).json(err);
-  }
-});
-
-app.get("/capture", async (req, res) => {
-  try {
-    console.log("CAPTURE REQUEST");
-
-    // ambil frame dari ESP32 (kalau kamu pakai frame buffer)
-    // atau trigger capture ESP32
-
-    res.json({
-      success: true,
-      message: "capture triggered"
-    });
-
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ error: "capture failed" });
-  }
-});
-
-app.get("/photos", async (req, res) => {
-  const photos = await Photo.find().sort({ createdAt: -1 });
-  res.json(photos);
-});
-
-app.delete("/photos/:id", async (req, res) => {
-  try {
-    console.log("DELETE HIT:", req.params.id);
-
-    await Photo.findByIdAndDelete(req.params.id);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json(err);
-  }
-});
-
-app.post("/control", (req, res) => {
-  const { action } = req.body;
-
-  io.emit("esp-command", action);
-
-  res.json({
-    success: true,
-    action
-  });
-});
-
-io.on("connection", (socket) => {
-  console.log("Client Connected");
-});
-
+// Test koneksi ESP32
 app.get("/test", (req, res) => {
-  console.log("ESP32 TERHUBUNG");
+  console.log("ESP32 terhubung");
   res.send("OK");
 });
 
-const PORT = process.env.PORT || 5000;
+// Upload foto dari ESP32 → simpan ke Cloudinary → simpan ke MongoDB
+app.post(
+  "/upload",
+  express.raw({ type: "image/jpeg", limit: "10mb" }),
+  async (req, res) => {
+    try {
+      const buffer = req.body;
+      if (!buffer || buffer.length === 0) {
+        return res.status(400).json({ error: "Buffer kosong" });
+      }
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+      cloudinary.uploader
+        .upload_stream({ resource_type: "image" }, async (err, result) => {
+          if (err) {
+            console.log("Cloudinary error:", err);
+            return res.status(500).json(err);
+          }
+
+          const photo = await Photo.create({ imageUrl: result.secure_url });
+          io.emit("new-photo", photo);
+          res.json(photo);
+        })
+        .end(buffer);
+    } catch (err) {
+      console.log("Upload error:", err);
+      res.status(500).json(err);
+    }
+  }
+);
+
+// Ambil semua foto (terbaru duluan)
+app.get("/photos", async (req, res) => {
+  try {
+    const photos = await Photo.find().sort({ createdAt: -1 });
+    res.json(photos);
+  } catch (err) {
+    res.status(500).json(err);
+  }
 });
+
+// Hapus foto
+app.delete("/photos/:id", async (req, res) => {
+  try {
+    await Photo.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.log("Delete error:", err);
+    res.status(500).json(err);
+  }
+});
+
+// Socket
+io.on("connection", (socket) => {
+  console.log("Client connected:", socket.id);
+});
+
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
