@@ -29,16 +29,17 @@ const allowedOrigins = [
   "https://smart-glasses.vercel.app"
 ];
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: false
-}));
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-app.options("*", cors());
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
 
-app.use(express.json());
+  next();
+});
 
 console.log(process.env.MONGO_URI)
 mongoose.connect(process.env.MONGO_URI)
@@ -92,20 +93,15 @@ app.get("/photos", async (req, res) => {
 });
 
 app.delete("/photos/:id", async (req, res) => {
-
   try {
+    console.log("DELETE HIT:", req.params.id);
 
     await Photo.findByIdAndDelete(req.params.id);
 
-    res.json({
-      success: true
-    });
-
-  } catch (error) {
-
-    console.log(error);
-
-    res.status(500).json(error);
+    res.json({ success: true });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json(err);
   }
 });
 
