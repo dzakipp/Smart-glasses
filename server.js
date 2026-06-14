@@ -31,14 +31,13 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST"],
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: false
 }));
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+app.options("*", cors());
+
 app.use(express.json());
 
 console.log(process.env.MONGO_URI)
