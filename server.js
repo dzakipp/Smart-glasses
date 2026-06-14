@@ -95,27 +95,34 @@ app.get("/stream", (req, res) => {
 const Photo = mongoose.model("Photo", PhotoSchema);
 const upload = multer({ dest: "uploads/" });
 
-app.post("/upload", upload.single("image"), async (req, res) => {
+app.post("/upload", express.raw({ type: "image/jpeg", limit: "10mb" }), async (req, res) => {
   try {
-    console.log("UPLOAD HIT");
-    console.log("FILE:", req.file);
+    console.log("UPLOAD RAW HIT");
 
-    const result = await cloudinary.uploader.upload(req.file.path);
+    const buffer = req.body;
 
-    console.log("CLOUDINARY:", result.secure_url);
+    const result = await cloudinary.uploader.upload_stream(
+      { resource_type: "image" },
+      (error, result) => {
+        if (error) {
+          console.log(error);
+          return res.status(500).json(error);
+        }
 
-    const photo = await Photo.create({
-      imageUrl: result.secure_url
-    });
+        Photo.create({
+          imageUrl: result.secure_url
+        }).then((photo) => {
+          io.emit("new-photo", photo);
+          res.json(photo);
+        });
+      }
+    );
 
-    console.log("PHOTO SAVED:", photo);
+    require("streamifier").createReadStream(buffer).pipe(result);
 
-    io.emit("new-photo", photo);
-
-    res.json(photo);
-  } catch (error) {
-    console.log("UPLOAD ERROR:", error);
-    res.status(500).json(error);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json(err);
   }
 });
 app.get("/capture", async (req, res) => {
