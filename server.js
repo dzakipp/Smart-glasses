@@ -15,13 +15,12 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:5173",
-      "https://smart-glasses.vercel.app"
-    ],
+    origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ["websocket", "polling"]
 });
+
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
 }
@@ -29,6 +28,12 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://smart-glasses.vercel.app"
 ];
+
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  credentials: false
+}));
 
 app.use(cors({
   origin: allowedOrigins,
