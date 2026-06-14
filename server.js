@@ -9,6 +9,7 @@ const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
 
 dotenv.config();
+express.raw({ type: "image/jpeg" })
 
 const app = express();
 const server = http.createServer(app);
