@@ -72,19 +72,24 @@ app.get("/stream", (req, res) => {
     "Content-Type": "multipart/x-mixed-replace; boundary=frame",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
+    "Pragma": "no-cache"
   });
+
+  res.flushHeaders?.();
 
   const interval = setInterval(() => {
     if (!latestFrame) return;
 
-    res.write("--frame\r\n");
-    res.write("Content-Type: image/jpeg\r\n");
+    res.write(`--frame\r\n`);
+    res.write(`Content-Type: image/jpeg\r\n`);
     res.write(`Content-Length: ${latestFrame.length}\r\n\r\n`);
     res.write(latestFrame);
     res.write("\r\n");
-  }, 100);
+  }, 100); // 10 FPS aman
 
-  req.on("close", () => clearInterval(interval));
+  req.on("close", () => {
+    clearInterval(interval);
+  });
 });
 
 const Photo = mongoose.model("Photo", PhotoSchema);
@@ -111,6 +116,23 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     console.log(error);
 
     res.status(500).json(error);
+  }
+});
+app.get("/capture", async (req, res) => {
+  try {
+    console.log("CAPTURE REQUEST");
+
+    // ambil frame dari ESP32 (kalau kamu pakai frame buffer)
+    // atau trigger capture ESP32
+
+    res.json({
+      success: true,
+      message: "capture triggered"
+    });
+
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "capture failed" });
   }
 });
 
