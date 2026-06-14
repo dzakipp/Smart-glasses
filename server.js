@@ -96,25 +96,25 @@ const Photo = mongoose.model("Photo", PhotoSchema);
 const upload = multer({ dest: "uploads/" });
 
 app.post("/upload", upload.single("image"), async (req, res) => {
-
   try {
+    console.log("UPLOAD HIT");
+    console.log("FILE:", req.file);
 
     const result = await cloudinary.uploader.upload(req.file.path);
+
+    console.log("CLOUDINARY:", result.secure_url);
 
     const photo = await Photo.create({
       imageUrl: result.secure_url
     });
 
-    fs.unlinkSync(req.file.path);
+    console.log("PHOTO SAVED:", photo);
 
     io.emit("new-photo", photo);
 
     res.json(photo);
-
   } catch (error) {
-
-    console.log(error);
-
+    console.log("UPLOAD ERROR:", error);
     res.status(500).json(error);
   }
 });
