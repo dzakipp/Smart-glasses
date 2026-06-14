@@ -101,30 +101,32 @@ app.post("/upload", express.raw({ type: "image/jpeg", limit: "10mb" }), async (r
 
     const buffer = req.body;
 
-    const result = await cloudinary.uploader.upload_stream(
+    const stream = cloudinary.uploader.upload_stream(
       { resource_type: "image" },
-      (error, result) => {
+      async (error, result) => {
         if (error) {
           console.log(error);
           return res.status(500).json(error);
         }
 
-        Photo.create({
+        const photo = await Photo.create({
           imageUrl: result.secure_url
-        }).then((photo) => {
-          io.emit("new-photo", photo);
-          res.json(photo);
         });
+
+        io.emit("new-photo", photo);
+
+        res.json(photo);
       }
     );
 
-    require("streamifier").createReadStream(buffer).pipe(result);
+    require("streamifier").createReadStream(buffer).pipe(stream);
 
   } catch (err) {
     console.log(err);
     res.status(500).json(err);
   }
 });
+
 app.get("/capture", async (req, res) => {
   try {
     console.log("CAPTURE REQUEST");
