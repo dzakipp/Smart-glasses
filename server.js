@@ -15,11 +15,25 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*"
+    origin: [
+      "http://localhost:5173",
+      "https://smart-glasses.vercel.app"
+    ],
+    methods: ["GET", "POST"]
   }
 });
+if (!fs.existsSync("uploads")) {
+  fs.mkdirSync("uploads");
+}
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://smart-glasses.vercel.app"
+];
 
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(express.json());
 
 console.log(process.env.MONGO_URI)
