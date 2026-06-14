@@ -9,7 +9,7 @@ const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
 
 dotenv.config();
-express.raw({ type: "image/jpeg" })
+
 
 const app = express();
 const server = http.createServer(app);
@@ -98,17 +98,23 @@ const upload = multer({ dest: "uploads/" });
 
 app.post("/upload", express.raw({ type: "image/jpeg", limit: "10mb" }), async (req, res) => {
   try {
-    console.log("UPLOAD RAW HIT");
+    console.log("UPLOAD HIT");
 
     const buffer = req.body;
 
-    const stream = cloudinary.uploader.upload_stream(
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: "empty buffer" });
+    }
+
+    cloudinary.uploader.upload_stream(
       { resource_type: "image" },
-      async (error, result) => {
-        if (error) {
-          console.log(error);
-          return res.status(500).json(error);
+      async (err, result) => {
+        if (err) {
+          console.log("CLOUDINARY ERROR:", err);
+          return res.status(500).json(err);
         }
+
+        console.log("UPLOAD SUCCESS:", result.secure_url);
 
         const photo = await Photo.create({
           imageUrl: result.secure_url
@@ -118,12 +124,10 @@ app.post("/upload", express.raw({ type: "image/jpeg", limit: "10mb" }), async (r
 
         res.json(photo);
       }
-    );
-
-    require("streamifier").createReadStream(buffer).pipe(stream);
+    ).end(buffer);
 
   } catch (err) {
-    console.log(err);
+    console.log("UPLOAD ERROR:", err);
     res.status(500).json(err);
   }
 });
