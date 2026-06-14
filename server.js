@@ -41,6 +41,8 @@ app.use((req, res, next) => {
   next();
 });
 
+let latestFrame = null;
+
 console.log(process.env.MONGO_URI)
 mongoose.connect(process.env.MONGO_URI)
 .then(() => console.log("MongoDB Connected"))
@@ -58,6 +60,31 @@ const PhotoSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+app.post("/frame", express.raw({ type: "image/jpeg", limit: "5mb" }), (req, res) => {
+  latestFrame = req.body;
+  res.sendStatus(200);
+});
+
+app.get("/stream", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "multipart/x-mixed-replace; boundary=frame",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+  });
+
+  const interval = setInterval(() => {
+    if (!latestFrame) return;
+
+    res.write("--frame\r\n");
+    res.write("Content-Type: image/jpeg\r\n");
+    res.write(`Content-Length: ${latestFrame.length}\r\n\r\n`);
+    res.write(latestFrame);
+    res.write("\r\n");
+  }, 100);
+
+  req.on("close", () => clearInterval(interval));
 });
 
 const Photo = mongoose.model("Photo", PhotoSchema);
